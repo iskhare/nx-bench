@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y git patch && rm -rf /var/lib/apt/lists/*
+
+# Install networkx dependencies (but NOT networkx itself — that comes from the mounted repo)
+RUN pip install --no-cache-dir \
+    numpy scipy matplotlib pandas pytest pytest-json-report
+
+WORKDIR /repo
+
+COPY score_in_docker.sh /score_in_docker.sh
+RUN chmod +x /score_in_docker.sh
+
+ENTRYPOINT ["/score_in_docker.sh"]
