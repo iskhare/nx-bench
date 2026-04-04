@@ -1,3 +1,7 @@
+# Claude code and codex
+.claude/
+.codex/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
