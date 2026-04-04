@@ -78,6 +78,10 @@ def main():
         if not src_diff:
             continue
 
+        # Must have test files for SWE-bench-style evaluation
+        if not c["test_files"]:
+            continue
+
         # Skip trivially small diffs (< 5 changed lines)
         changed = [l for l in src_diff.splitlines()
                     if l.startswith(("+", "-")) and not l.startswith(("+++", "---"))]

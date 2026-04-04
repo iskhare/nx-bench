@@ -10,14 +10,16 @@ Usage:
   python run_benchmark.py --models openai/gpt-4o   # single model
 """
 
-import json, os, argparse, subprocess, shutil, traceback
+import json, os, argparse, subprocess, shutil, traceback, yaml
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from minisweagent import DefaultAgent, LitellmModel, LocalEnvironment
+from minisweagent.agents.default import DefaultAgent
+from minisweagent.models.litellm_model import LitellmModel
+from minisweagent.environments.local import LocalEnvironment
 from score import score_task
 
 # ── Config ──────────────────────────────────────────────────────────────
@@ -30,7 +32,12 @@ MODELS = [
 
 N_PARALLEL_AGENTS = 3
 N_PARALLEL_SCORING = 6
-REPO_DIR = Path(__file__).parent / "networkx"
+BASE_DIR = Path(__file__).parent.resolve()
+REPO_DIR = BASE_DIR / "networkx"
+
+# Load mini-swe-agent default config for agent templates
+_MSA_CONFIG_PATH = BASE_DIR / "mini-swe-agent" / "src" / "minisweagent" / "config" / "default.yaml"
+_MSA_CONFIG = yaml.safe_load(_MSA_CONFIG_PATH.read_text())
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -46,7 +53,7 @@ def git(cwd, *args, check=True):
 
 def setup_worktree(task, workdir):
     """Create an isolated git worktree at the task's base_sha."""
-    wt = workdir / task["task_id"]
+    wt = workdir.resolve() / task["task_id"]
 
     if wt.exists():
         git(REPO_DIR, "worktree", "remove", "--force", str(wt), check=False)
@@ -69,9 +76,12 @@ def run_agent(task, model_name, workdir):
     try:
         wt = setup_worktree(task, workdir)
 
-        model = LitellmModel(model_name=model_name)
-        env = LocalEnvironment(cwd=str(wt))
-        agent = DefaultAgent(model=model, env=env)
+        model = LitellmModel(model_name=model_name, **_MSA_CONFIG.get("model", {}))
+        env = LocalEnvironment(cwd=str(wt), **_MSA_CONFIG.get("environment", {}))
+        agent = DefaultAgent(
+            model=model, env=env,
+            **_MSA_CONFIG["agent"],
+        )
 
         agent.run(task=task["prompt"])
 
@@ -92,6 +102,7 @@ def score_in_docker(result, task, workdir):
     """Score one agent patch in a Docker container."""
     task_id = task["task_id"]
     model_tag = result["model"].split("/")[-1]
+    workdir = workdir.resolve()
     wt = workdir / task_id
 
     results_dir = workdir / f"{task_id}_results_{model_tag}"
@@ -108,8 +119,8 @@ def score_in_docker(result, task, workdir):
         patch_path = score_repo / "agent.patch"
         patch_path.write_text(result["patch"] if result["patch"] else "")
 
-        test_spec = task.get("test_spec", "")
-        regression_dir = task.get("regression_dir", "")
+        test_spec = task.get("test_spec") or ""
+        regression_dir = task.get("regression_dir") or ""
 
         docker_cmd = [
             "docker", "run", "--rm",
