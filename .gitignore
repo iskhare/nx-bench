@@ -1,3 +1,7 @@
+# Cloned repos (too large to commit)
+networkx/
+mini-swe-agent/
+
 # Claude code and codex
 .claude/
 .codex/
