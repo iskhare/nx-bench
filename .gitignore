@@ -2,6 +2,9 @@
 networkx/
 mini-swe-agent/
 
+# Worktrees and scoring temp dirs (contain embedded .git repos)
+**/workdirs/
+
 # Claude code and codex
 .claude/
 .codex/
