@@ -2,7 +2,7 @@
 
 An unsaturated evaluation benchmark for coding agents, built from real merged pull requests in [NetworkX](https://github.com/networkx/networkx). Applies the [SWE-bench](https://github.com/princeton-nlp/SWE-bench) methodology to a repository not included in any known coding agent benchmark, using [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) as the agent scaffold.
 
-**[Paper (PDF)](nx-bench-report.pdf)** | **[Results](results/)**
+**[Paper (PDF)](nx-bench-report.pdf)**
 
 ---
 
