@@ -17,6 +17,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import litellm
+litellm.suppress_debug_info = True
+
 from minisweagent.agents.default import DefaultAgent
 from minisweagent.models.litellm_model import LitellmModel
 from minisweagent.environments.local import LocalEnvironment
@@ -46,6 +49,9 @@ def tprint(msg):
     with _print_lock:
         print(msg, flush=True)
 
+# Lock for git worktree operations (git doesn't handle concurrent worktree adds)
+_worktree_lock = threading.Lock()
+
 # ── Helpers ─────────────────────────────────────────────────────────────
 
 def git(cwd, *args, check=True):
@@ -63,12 +69,13 @@ def setup_worktree(task, model_tag, workdir):
     Uses model_tag in the path so different models don't collide."""
     wt = workdir.resolve() / f"{task['task_id']}_{model_tag}"
 
-    if wt.exists():
-        git(REPO_DIR, "worktree", "remove", "--force", str(wt), check=False)
+    with _worktree_lock:
         if wt.exists():
-            shutil.rmtree(wt)
+            git(REPO_DIR, "worktree", "remove", "--force", str(wt), check=False)
+            if wt.exists():
+                shutil.rmtree(wt)
 
-    git(REPO_DIR, "worktree", "add", "--force", "--detach", str(wt), task["base_sha"])
+        git(REPO_DIR, "worktree", "add", "--force", "--detach", str(wt), task["base_sha"])
 
     # Apply test diff: new tests now exist but fail (SWE-bench setup)
     if task.get("test_diff"):
