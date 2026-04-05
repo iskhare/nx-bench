@@ -10,7 +10,7 @@ Usage:
   python run_benchmark.py --models openai/gpt-4o   # single model
 """
 
-import json, os, sys, argparse, subprocess, shutil, traceback, yaml, threading
+import json, os, argparse, subprocess, shutil, traceback, yaml, threading
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
@@ -26,8 +26,8 @@ from score import score_task
 
 MODELS = [
     "openai/gpt-4o",
-    "together_ai/Qwen/Qwen3-Coder-Next-FP8",
-    "together_ai/openai/gpt-oss-120b",
+    "openai/gpt-5.4-mini",
+    "openai/gpt-5-codex",
 ]
 
 # Each model gets its own pool of parallel agents
@@ -63,8 +63,6 @@ def setup_worktree(task, model_tag, workdir):
     Uses model_tag in the path so different models don't collide."""
     wt = workdir.resolve() / f"{task['task_id']}_{model_tag}"
 
-    # Clean up any existing or stale worktree registration
-    git(REPO_DIR, "worktree", "prune", check=False)
     if wt.exists():
         git(REPO_DIR, "worktree", "remove", "--force", str(wt), check=False)
         if wt.exists():
@@ -88,14 +86,11 @@ def run_agent(task, model_name, workdir):
         wt = setup_worktree(task, model_tag, workdir)
 
         model_kwargs = {**_MSA_CONFIG.get("model", {})}
-        # Together.ai models aren't in LiteLLM's cost registry — ignore cost tracking errors
-        if "together_ai" in model_name:
-            model_kwargs["cost_tracking"] = "ignore_errors"
         model = LitellmModel(model_name=model_name, **model_kwargs)
         env = LocalEnvironment(cwd=str(wt), **_MSA_CONFIG.get("environment", {}))
         agent_kwargs = {**_MSA_CONFIG["agent"]}
-        agent_kwargs["step_limit"] = 50  # cap agent steps (SWE-bench uses 250, 50 is reasonable for our tasks)
-        agent_kwargs["cost_limit"] = 5.0  # cap cost per task (gpt-4o needs more headroom)
+        agent_kwargs["step_limit"] = 50  # cap agent steps
+        agent_kwargs["cost_limit"] = 5.0  # cap cost per task
         agent = DefaultAgent(
             model=model, env=env,
             **agent_kwargs,
@@ -103,8 +98,9 @@ def run_agent(task, model_name, workdir):
 
         agent.run(task=task["prompt"])
 
-        # Capture whatever diff the agent produced
-        r = git(wt, "diff", check=False)
+        # Capture all changes: tracked modifications + new untracked files
+        git(wt, "add", "-A", check=False)
+        r = git(wt, "diff", "--cached", check=False)
         patch = r.stdout
 
         return {"task_id": task["task_id"], "model": model_name,
@@ -168,10 +164,12 @@ def score_in_docker(result, task, workdir):
         result["score"] = 0.0
         result["score_error"] = str(e)[:200]
 
-    try:
-        shutil.rmtree(score_repo)
-    except Exception:
-        pass
+    # Clean up score copy and worktree to save disk space
+    for d in [score_repo, wt]:
+        try:
+            shutil.rmtree(d)
+        except Exception:
+            pass
 
     return result
 
@@ -235,6 +233,9 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     workdir = out / "workdirs"
     workdir.mkdir(exist_ok=True)
+
+    # Prune stale worktrees once at startup (not per-task to avoid race conditions)
+    git(REPO_DIR, "worktree", "prune", check=False)
 
     tprint(f"Running {len(tasks)} tasks x {len(args.models)} models IN PARALLEL")
     tprint(f"Agents per model: {args.agents_per_model}, Scoring workers: {args.parallel_scoring}")
