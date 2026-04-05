@@ -72,10 +72,10 @@ Composite score in [0, 1] using only the repo's own test suite:
 
 | Component | Weight | What it measures |
 |-----------|--------|------------------|
-| Targeted test pass rate | 0.50 | Do the PR's fail-to-pass tests pass? |
+| Targeted test pass rate | 0.70 | Do the PR's fail-to-pass tests pass? |
 | Regression pass rate | 0.30 | Do existing module tests still pass? |
-| Patch parseable | 0.10 | Did the model produce a valid diff? |
-| Patch size penalty | 0.10 | Penalizes absurdly large patches |
+
+A model that does nothing scores ~0.30 (existing tests still pass). Solving the task cleanly scores 1.0. Solving but breaking existing tests lands in between.
 
 ### Architecture
 - **Agent runs**: Local, parallelized via git worktrees + mini-swe-agent
