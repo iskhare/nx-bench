@@ -9,8 +9,8 @@ Uses the SWE-bench methodology: roll back source changes from a PR, keep the new
 | Model | Provider |
 |-------|----------|
 | GPT-4o | OpenAI |
-| Qwen3-Coder-Next-FP8 | Together.ai |
-| GPT-OSS-120B | Together.ai |
+| GPT-5.4-mini | OpenAI |
+| GPT-5-codex | OpenAI |
 
 ## Setup
 
@@ -31,8 +31,9 @@ cd mini-swe-agent && pip install -e . && cd ..
 # 4. Install Python deps
 pip install -r requirements.txt
 
-# 5. Set API keys (copy and fill in)
-cp .env.example .env
+# 5. Set API keys in a .env file
+echo "OPENAI_API_KEY=sk-..." > .env
+echo "GITHUB_TOKEN=ghp_..." >> .env
 
 # 6. Build Docker scoring image
 docker build -f Dockerfile.eval -t nx-eval .
@@ -52,7 +53,7 @@ python generate_tasks.py
 # Pilot run — 10 tasks, verify everything works (~20 min)
 python run_benchmark.py --max-tasks 10 --output results_pilot/
 
-# Full run — 100 tasks x 3 models (~90 min)
+# Full run — 100 tasks x 3 models in parallel (~1.5-2 hrs)
 python run_benchmark.py --output results/
 
 # Analyze results
