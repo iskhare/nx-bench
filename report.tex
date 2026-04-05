@@ -1,0 +1,238 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\title{\textbf{nx-bench}: An Unsaturated Coding Agent Benchmark\\from NetworkX Merged Pull Requests}
+\author{Ishan Khare}
+\date{April 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present \textbf{nx-bench}, a benchmark for evaluating coding agents on real software engineering tasks mined from the NetworkX graph library. Using the SWE-bench methodology, we extract 100 tasks from merged pull requests, roll back source changes while preserving new tests, and ask agents to make failing tests pass. We evaluate three OpenAI models---GPT-5.4-mini, GPT-5-codex, and GPT-5.1-codex-mini---using mini-swe-agent as the scaffold. GPT-5-codex achieves the highest mean score of 0.842 with a 78\% pass@1 rate, while all models struggle most with performance optimization tasks. The benchmark is fully automated, Docker-isolated, and designed to avoid saturation.
+\end{abstract}
+
+\section{Evaluation Environment}
+
+\subsection{Repository Selection}
+
+We chose \texttt{networkx/networkx}, a pure-Python graph algorithms library with over 5,000 merged pull requests. NetworkX is well-suited for benchmarking because:
+
+\begin{itemize}[nosep]
+    \item Pure Python---no compilation step, fast iteration for agents
+    \item Comprehensive test suite with high coverage
+    \item Diverse algorithmic challenges: shortest paths, centrality, traversal, graph generators, I/O parsers
+    \item Not included in SWE-bench or other known coding agent benchmark datasets
+\end{itemize}
+
+\subsection{Architecture}
+
+The evaluation pipeline has two phases:
+
+\begin{enumerate}[nosep]
+    \item \textbf{Agent Phase (local)}: For each (task, model) pair, we create an isolated git worktree at the pre-PR commit, apply the PR's test patch (so new tests exist but fail), and run mini-swe-agent with a \texttt{LocalEnvironment}. The agent reads files, executes commands, and edits source code. We capture the resulting diff.
+    \item \textbf{Scoring Phase (Docker)}: Each agent patch is scored in an isolated Docker container (\texttt{python:3.11-slim}) with \texttt{PYTHONPATH=/repo} to avoid installation conflicts. The container runs pytest with \texttt{pytest-json-report} and outputs structured results.
+\end{enumerate}
+
+Both phases are parallelized: models run concurrently (one thread per model), with 5 concurrent agents per model and 10 concurrent Docker scoring containers. Thread safety for git worktree operations is ensured via a global lock.
+
+\section{Task Design}
+
+\subsection{Mining Process}
+
+We mined 3,091 merged pull requests from the NetworkX repository via the GitHub API, filtering to 200 candidates based on:
+
+\begin{itemize}[nosep]
+    \item Touches source files in target directories (\texttt{algorithms/}, \texttt{classes/}, \texttt{generators/}, \texttt{readwrite/}, \texttt{linalg/})
+    \item Includes test file changes (required for fail-to-pass evaluation)
+    \item Modifies $\leq$ 8 files total
+    \item Has a substantive PR description ($\geq$ 20 characters)
+    \item Excludes pure-documentation PRs without tests
+\end{itemize}
+
+\subsection{Task Construction}
+
+Following the SWE-bench methodology, each task is constructed as:
+
+\begin{enumerate}[nosep]
+    \item \textbf{Starting state}: Repository checked out at the PR's base commit (before the PR was merged)
+    \item \textbf{Test patch applied}: The PR's test changes are applied, introducing tests that \emph{exist but fail}
+    \item \textbf{Agent prompt}: The PR title, description, and relevant file paths are provided
+    \item \textbf{Goal}: The agent must modify source code to make the failing tests pass without breaking existing tests
+\end{enumerate}
+
+We validated that each task's base commit and merge commit exist in the repository and that the source diff contains at least 5 changed lines (excluding trivially small fixes).
+
+\subsection{Task Distribution}
+
+The final 100 tasks were selected via stratified sampling:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lrp{7cm}}
+\toprule
+\textbf{Category} & \textbf{Count} & \textbf{Description} \\
+\midrule
+Feature & 51 & New algorithms, API additions, parameter support \\
+Bugfix & 29 & Incorrect results, edge case failures, type errors \\
+Performance & 11 & Algorithm optimizations, complexity improvements \\
+Refactor & 9 & Code reorganization, API simplification \\
+\bottomrule
+\end{tabular}
+\caption{Task category distribution}
+\end{table}
+
+\section{Scoring}
+
+The score for each task is a weighted composite in $[0, 1]$ using \emph{only the repository's own test suite}---no hand-written checks:
+
+\begin{equation}
+    \text{score} = 0.70 \times \text{targeted\_pass\_rate} + 0.30 \times \text{regression\_pass\_rate}
+\end{equation}
+
+\begin{itemize}[nosep]
+    \item \textbf{Targeted test pass rate} (weight 0.70): Fraction of the PR's specific fail-to-pass tests that now pass. This is the core metric---did the agent solve the task?
+    \item \textbf{Regression pass rate} (weight 0.30): Fraction of existing module-level tests that still pass. This penalizes solutions that break surrounding functionality.
+\end{itemize}
+
+A model that submits no changes scores $\sim$0.30 (existing tests still pass, targeted tests fail). Solving the task cleanly yields 1.0. This design provides partial credit and avoids the binary pass/fail saturation problem of simpler metrics.
+
+\section{Results}
+
+\subsection{Overall Performance}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Mean} & \textbf{Median} & \textbf{Pass@1} & \textbf{Errors} \\
+\midrule
+GPT-5-codex & 0.842 & 1.000 & 78\% & 0\% \\
+GPT-5.1-codex-mini & 0.822 & 1.000 & 73\% & 0\% \\
+GPT-5.4-mini & 0.784 & 1.000 & 69\% & 0\% \\
+\bottomrule
+\end{tabular}
+\caption{Overall benchmark results (N=100 tasks per model, Pass@1 = score $\geq$ 0.9)}
+\end{table}
+
+All three models achieve median scores of 1.0, indicating that the majority of tasks are solved perfectly. The differentiation lies in the tail: how many tasks each model fails on entirely.
+
+\subsection{Score Components}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Model} & \textbf{Targeted Pass Rate} & \textbf{Regression Pass Rate} \\
+\midrule
+GPT-5-codex & 0.794 & 0.953 \\
+GPT-5.1-codex-mini & 0.764 & 0.957 \\
+GPT-5.4-mini & 0.725 & 0.923 \\
+\bottomrule
+\end{tabular}
+\caption{Mean score components per model}
+\end{table}
+
+Regression pass rates are consistently high ($>$0.92), meaning models rarely break existing functionality. The primary differentiator is targeted test pass rate---the ability to actually solve the task.
+
+\subsection{Per-Category Breakdown}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Bugfix} & \textbf{Feature} & \textbf{Performance} & \textbf{Refactor} \\
+\midrule
+GPT-5-codex & 0.920 & 0.831 & 0.655 & 0.883 \\
+GPT-5.1-codex-mini & 0.856 & 0.823 & 0.589 & \textbf{0.989} \\
+GPT-5.4-mini & 0.887 & 0.756 & 0.565 & 0.883 \\
+\bottomrule
+\end{tabular}
+\caption{Mean score by task category}
+\end{table}
+
+\subsection{Score Distribution}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Model} & \textbf{[0, 0.3)} & \textbf{[0.3, 0.5)} & \textbf{[0.5, 0.7)} & \textbf{[0.7, 0.9)} & \textbf{[0.9, 1.0]} \\
+\midrule
+GPT-5-codex & 8 & 12 & 0 & 2 & 78 \\
+GPT-5.1-codex-mini & 11 & 12 & 0 & 4 & 73 \\
+GPT-5.4-mini & 16 & 10 & 0 & 5 & 69 \\
+\bottomrule
+\end{tabular}
+\caption{Score distribution (number of tasks in each bin)}
+\end{table}
+
+The distribution is notably bimodal: tasks are either solved near-perfectly ($\geq$0.9) or largely failed ($<$0.5). The empty [0.5, 0.7) bin across all models suggests that partial solutions are rare---agents either understand the required change or they don't.
+
+\subsection{Key Observations}
+
+\begin{enumerate}
+    \item \textbf{GPT-5-codex is the strongest overall}, with the highest mean score (0.842) and pass@1 rate (78\%). It particularly excels at bugfixes (0.920).
+
+    \item \textbf{Performance optimization tasks are the hardest category} across all models (0.565--0.655). These require understanding algorithmic complexity and making targeted efficiency improvements, which is qualitatively different from functional correctness tasks.
+
+    \item \textbf{GPT-5.1-codex-mini dominates refactoring} with a near-perfect 0.989 mean---surpassing the larger GPT-5-codex (0.883). This suggests that code reorganization tasks may benefit from the more focused reasoning of smaller specialized models.
+
+    \item \textbf{The benchmark is not saturated}: no model exceeds 78\% pass@1, and 8--16 tasks per model score below 0.3 (effectively unsolved). This leaves meaningful room for improvement.
+
+    \item \textbf{Zero errors across all 300 runs}: the evaluation infrastructure is robust, with no agent crashes, API failures, or scoring errors in the final run.
+\end{enumerate}
+
+\section{Shortcomings}
+
+\begin{itemize}
+    \item \textbf{Task recency bias}: Mining from recently updated PRs overrepresents recent code patterns. Older, deeper algorithmic changes are underrepresented.
+    \item \textbf{Single run}: No pass@k analysis to measure variance. A task that passes once at temperature $>$ 0 might fail on another attempt.
+    \item \textbf{Joint evaluation}: Results reflect model + mini-swe-agent scaffold jointly, not pure model capability. A different scaffold could change rankings.
+    \item \textbf{No code quality dimension}: The scoring is purely functional (tests pass/fail). Two solutions with different readability or maintainability score identically.
+    \item \textbf{Under-specified PR descriptions}: Some PRs have minimal descriptions, making the task unfairly hard---the agent must infer intent primarily from failing test names.
+    \item \textbf{Category imbalance}: Only 9 refactor and 11 performance tasks limits statistical power for per-category comparisons.
+    \item \textbf{Bimodal score distribution}: The empty [0.5, 0.7) bin suggests the scoring may lack granularity for partial solutions. A finer-grained test-level analysis could provide more signal.
+\end{itemize}
+
+\section{Proposed Improvements}
+
+\begin{enumerate}
+    \item \textbf{Scale to 500+ tasks}: Mine the full PR history and include issue-linked PRs (not just those with test changes) to increase diversity and statistical power.
+
+    \item \textbf{Pass@k analysis}: Run each task $k$ times with temperature $>$ 0 to measure variance and report pass@1, pass@5, and pass@10. This distinguishes ``reliably easy'' from ``occasionally solvable'' tasks.
+
+    \item \textbf{Difficulty tiers}: Auto-classify tasks by diff size, file count, and cyclomatic complexity to enable stratified analysis and identify the frontier of agent capability.
+
+    \item \textbf{Efficiency metrics}: Track tokens-to-solution and wall-clock time per task. Two models with equal scores but different costs have very different practical value.
+
+    \item \textbf{LLM-as-judge for code quality}: Add a secondary score from a separate model evaluating readability, idiomatic style, and solution elegance beyond test passage.
+
+    \item \textbf{Cross-repository generalization}: Extend the methodology to other pure-Python libraries (e.g., scikit-image, Biopython, librosa) to test whether agent performance generalizes across codebases.
+
+    \item \textbf{Scaffold comparison}: Run the same models with different agent scaffolds (SWE-agent, Aider, OpenHands) to disentangle model capability from scaffold design.
+\end{enumerate}
+
+\section{Reproducibility}
+
+All code, tasks, and results are available at \url{https://github.com/iskhare/nx-bench}. To reproduce:
+
+\begin{verbatim}
+conda create -n nx-bench python=3.11 -y && conda activate nx-bench
+git clone https://github.com/iskhare/nx-bench.git && cd nx-bench
+git clone https://github.com/networkx/networkx.git
+git clone https://github.com/SWE-agent/mini-swe-agent.git
+cd mini-swe-agent && pip install -e . && cd ..
+pip install -r requirements.txt
+docker build -f Dockerfile.eval -t nx-eval .
+python run_benchmark.py --output results/
+python analyze.py results/
+\end{verbatim}
+
+\end{document}
