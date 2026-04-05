@@ -8,9 +8,9 @@ Uses the SWE-bench methodology: roll back source changes from a PR, keep the new
 
 | Model | Provider |
 |-------|----------|
-| GPT-4o | OpenAI |
 | GPT-5.4-mini | OpenAI |
 | GPT-5-codex | OpenAI |
+| GPT-5.1-codex-mini | OpenAI |
 
 ## Setup
 

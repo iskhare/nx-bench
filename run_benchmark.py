@@ -28,9 +28,9 @@ from score import score_task
 # ── Config ──────────────────────────────────────────────────────────────
 
 MODELS = [
-    "openai/gpt-4o",
     "openai/gpt-5.4-mini",
     "openai/gpt-5-codex",
+    "openai/gpt-5.1-codex-mini",
 ]
 
 # Each model gets its own pool of parallel agents
