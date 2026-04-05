@@ -6,7 +6,6 @@
 \usepackage{amsmath}
 \usepackage{xcolor}
 \usepackage{enumitem}
-\usepackage{natbib}
 \usepackage{url}
 
 \hypersetup{
@@ -17,7 +16,9 @@
 }
 
 \title{\textbf{nx-bench}: An Unsaturated Coding Agent Benchmark\\from NetworkX Merged Pull Requests}
-\author{Ishan Khare}
+\author{Ishan Khare\\
+\href{mailto:iskhare@stanford.edu}{\texttt{iskhare@stanford.edu}}\\
+\href{https://iskhare.github.io}{\texttt{iskhare.github.io}}}
 \date{April 2026}
 
 \begin{document}
@@ -43,7 +44,7 @@ I selected NetworkX for several reasons. As a pure-Python library, it requires n
 
 The evaluation pipeline operates in two distinct phases. In the \textbf{agent phase}, each (task, model) pair receives an isolated git worktree checked out at the PR's base commit. The PR's test patch is applied so that new tests exist but fail, and mini-swe-agent is invoked with a \texttt{LocalEnvironment} rooted in the worktree. The agent iterates through a read-edit-execute loop---reading files, running commands, and modifying source code---until it submits or reaches the step limit. I then capture the full diff of all changes.
 
-In the \textbf{scoring phase}, each agent's patch is evaluated inside an isolated Docker container built from \texttt{python:3.11-slim}. The container uses \texttt{PYTHONPATH=/repo} rather than \texttt{pip install} to import NetworkX from the mounted worktree, avoiding cross-task contamination. Pytest runs with \texttt{pytest-json-report} to produce structured pass/fail results for both the targeted tests (from the PR) and regression tests (from the surrounding module).
+In the \textbf{scoring phase}, each agent's patch is evaluated inside an isolated Docker container built from \texttt{python:3.11-slim}. The container imports NetworkX directly from the mounted worktree rather than installing it, avoiding cross-task contamination. Pytest produces structured pass/fail results for both the targeted tests (from the PR) and regression tests (from the surrounding module).
 
 Both phases are parallelized. Models run concurrently with one thread per model, each managing a pool of 5 concurrent agent workers. Scoring uses 10 concurrent Docker containers. A global lock serializes git worktree creation to prevent race conditions.
 
