@@ -6,19 +6,6 @@ An unsaturated evaluation benchmark for coding agents, built from real merged pu
 
 ---
 
-## Table of Contents
-
-- [Key Results](#key-results)
-- [How It Works](#how-it-works)
-- [Task Distribution](#task-distribution)
-- [Scoring](#scoring)
-- [Repository Structure](#repository-structure)
-- [Setup & Reproduction](#setup--reproduction)
-- [Usage](#usage)
-- [Citation](#citation)
-
----
-
 ## Key Results
 
 Three OpenAI models evaluated on 100 tasks, with 0% error rate across all 300 runs:
@@ -39,15 +26,15 @@ Three OpenAI models evaluated on 100 tasks, with 0% error rate across all 300 ru
 | GPT-5.1-codex-mini | 0.856 | 0.823 | 0.589 | **0.989** |
 | GPT-5.4-mini | 0.887 | 0.756 | 0.565 | 0.883 |
 
+### Category Breakdown
+
+![Category Scores](figures/category_scores.png)
+
 ### Score Distribution
 
 ![Score Distribution](figures/score_distribution.png)
 
 The distribution is strongly **bimodal**: tasks are either solved near-perfectly (>= 0.9) or largely failed (< 0.5), with virtually no tasks in between. This suggests agents either fully grasp the required change or fail to engage with it meaningfully.
-
-### Category Breakdown
-
-![Category Scores](figures/category_scores.png)
 
 ### Key Findings
 
