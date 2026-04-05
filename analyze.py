@@ -46,8 +46,7 @@ def main(results_dir="results"):
             print(f"    {cat:<20} mean={sum(s)/len(s):.3f}  n={len(s)}")
 
     # Component breakdown
-    comps = ["targeted_test_pass_rate", "regression_pass_rate",
-             "patch_parseable", "patch_size_score"]
+    comps = ["targeted_test_pass_rate", "regression_pass_rate"]
     print(f"\n{'='*72}")
     print("  SCORE COMPONENTS (mean per model)")
     print("=" * 72)
